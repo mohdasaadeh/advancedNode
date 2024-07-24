@@ -2,12 +2,10 @@
 
 Starting project for a course on Advanced Node @ Udemy
 
-### Setup
+### Installation
 
-- Run `npm install` in the root of the project to install server dependencies
+- Run `npm install` in the root of the project to install the server's dependencies
 - Change into the client directory and run `npm install --legacy-peer-deps`
-- Change back into the root of the project and run `npm run dev` to start the server
-- Access the application at `localhost:3000` in your browser
+- Change back into the root of the project and run `npm run dev` to start application
 
-**Important:**
-The credentials for the Mongo Atlas DB in `dev.js` are read only. If you attempt to log in without first adding your own connection string (covered later in the course) you will see an error: `[0] MongoError: user is not allowed to do action [insert] on [advnode.users]`
+**Important** - the Mongo Atlas database credentials provided in `dev.js` are read only. If you attempt to login without using your own connection string (covered in the course) you will get the following error `[0] MongoError: user is not allowed to do action [insert] on [advnode.users]`
