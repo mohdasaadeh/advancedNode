@@ -1,60 +1,52 @@
-const mongoose = require("mongoose");
-const util = require("util");
-const redis = require("redis");
+const mongoose = require('mongoose');
+const redis = require('redis');
+const util = require('util');
+const keys = require('../config/keys');
 
-const promisify = util.promisify;
-
-const redisClient = redis.createClient("redis://127.0.0.1:6379");
-
-redisClient.hget = promisify(redisClient.hget);
-
+const client = redis.createClient(keys.redisUrl);
+client.hget = util.promisify(client.hget);
 const exec = mongoose.Query.prototype.exec;
 
-mongoose.Query.prototype.cache = function (
-  options = { topLevelCacheKey: Date.now() }
-) {
-  this.cachable = true;
-  this.topLevelCacheKey = JSON.stringify(options.topLevelCacheKey);
+mongoose.Query.prototype.cache = function(options = {}) {
+  this.useCache = true;
+  this.hashKey = JSON.stringify(options.key || '');
 
   return this;
 };
 
-mongoose.Query.prototype.exec = async function () {
-  if (!this.cachable) {
+mongoose.Query.prototype.exec = async function() {
+  if (!this.useCache) {
     return exec.apply(this, arguments);
   }
 
-  const query = this.getQuery();
-  const collectionName = this.mongooseCollection.name;
+  const key = JSON.stringify(
+    Object.assign({}, this.getQuery(), {
+      collection: this.mongooseCollection.name
+    })
+  );
 
-  const cacheKey = JSON.stringify({
-    ...query,
-    collectionName,
-  });
+  // See if we have a value for 'key' in redis
+  const cacheValue = await client.hget(this.hashKey, key);
 
-  const cacheResult = await redisClient.hget(this.topLevelCacheKey, cacheKey);
+  // If we do, return that
+  if (cacheValue) {
+    const doc = JSON.parse(cacheValue);
 
-  if (cacheResult) {
-    const cacheResultParsed = JSON.parse(cacheResult);
-
-    if (Array.isArray(cacheResultParsed)) {
-      return cacheResultParsed.map((c) => {
-        return new this.model(c);
-      });
-    }
-
-    return new this.model(cacheResultParsed);
+    return Array.isArray(doc)
+      ? doc.map(d => new this.model(d))
+      : new this.model(doc);
   }
 
+  // Otherwise, issue the query and store the result in redis
   const result = await exec.apply(this, arguments);
 
-  redisClient.hset(this.topLevelCacheKey, cacheKey, JSON.stringify(result));
+  client.hset(this.hashKey, key, JSON.stringify(result), 'EX', 10);
 
   return result;
 };
 
 module.exports = {
-  clearCache(topLevelCacheKey) {
-    redisClient.del(JSON.stringify(topLevelCacheKey));
-  },
+  clearHash(hashKey) {
+    client.del(JSON.stringify(hashKey));
+  }
 };
